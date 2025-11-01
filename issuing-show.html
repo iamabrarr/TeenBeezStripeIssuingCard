@@ -8,7 +8,10 @@
   <body>
     <h2>Stripe Issuing Card Details</h2>
 
-    <div id="card-details"></div>
+    <div id="card-number"></div>
+    <div id="card-expiry"></div>
+    <div id="card-cvc"></div>
+
     <button id="showCardBtn">Show Card Details</button>
 
     <script>
@@ -18,52 +21,51 @@
         const accountId = params.get("accountId");
 
         if (!cardId || !accountId) {
-          alert("Missing cardId or accountId in URL");
+          alert("Missing cardId or accountId");
           return;
         }
 
+        const functionUrl =
+          "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
+
         try {
-          // Step 1: Initialize Stripe with your publishable key
-          const stripe = Stripe("pk_live_YOUR_PUBLISHABLE_KEY"); // replace with your real key
-
-          // Step 2: Create nonce using Stripe.js (client-side)
-          const nonceResult = await stripe.issuing.cards.createNonce(cardId);
-          if (!nonceResult || !nonceResult.nonce) {
-            throw new Error("Failed to create nonce");
-          }
-
-          const nonce = nonceResult.nonce;
-          console.log("Created nonce:", nonce);
-
-          // Step 3: Request ephemeral key from Firebase Cloud Function
-          const response = await fetch(
-            "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cardId, nonce, accountId }),
-            }
-          );
+          // 1. Create ephemeral key (with dummy nonce)
+          const response = await fetch(functionUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cardId,
+              nonce: "fake_nonce_" + Math.random().toString(36).substring(2),
+              accountId,
+            }),
+          });
 
           const data = await response.json();
-          if (!data.success) {
-            throw new Error(data.error || "Failed to create ephemeral key");
-          }
+          if (!data.success) throw new Error(data.error || "Ephemeral key failed");
 
           const ephemeralKeySecret = data.ephemeralKeySecret;
 
-          // Step 4: Reveal full card details using Stripe.js
-          const cardDetails = await stripe.issuing.cards.reveal(cardId, {
-            ephemeralKeySecret: ephemeralKeySecret,
+          // 2. Initialize Stripe with your publishable key
+          const stripe = Stripe("pk_live_or_test_your_publishable_key_here", {
+            stripeAccount: accountId,
           });
 
-          console.log("Card Details:", cardDetails);
+          // 3. Mount the Issuing Card Number Element
+          const elements = stripe.elements({ clientSecret: ephemeralKeySecret });
+          const cardNumber = elements.create("issuingCardNumberDisplay", {
+            issuingCard: cardId,
+          });
+          cardNumber.mount("#card-number");
 
-          document.getElementById("card-details").innerHTML = `
-            <p><strong>Card Number:</strong> ${cardDetails.card.number}</p>
-            <p><strong>Expiry:</strong> ${cardDetails.card.exp_month}/${cardDetails.card.exp_year}</p>
-            <p><strong>CVC:</strong> ${cardDetails.card.cvc}</p>
-          `;
+          const cardExpiry = elements.create("issuingCardExpiryDisplay", {
+            issuingCard: cardId,
+          });
+          cardExpiry.mount("#card-expiry");
+
+          const cardCvc = elements.create("issuingCardCvcDisplay", {
+            issuingCard: cardId,
+          });
+          cardCvc.mount("#card-cvc");
         } catch (err) {
           console.error("Error:", err);
           alert("Error showing card details: " + err.message);
