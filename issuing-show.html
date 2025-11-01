@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Show Card Details</title>
+    <script src="https://js.stripe.com/v3/"></script>
+  </head>
+  <body>
+    <h2>View Card Details</h2>
+    <div id="issuing-element"></div>
+    <button id="show-btn">Show Card Details</button>
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const cardId = urlParams.get("card_id");
+      const accountId = urlParams.get("account_id");
+
+      async function init() {
+        // 1️⃣ Get ephemeral key nonce
+        const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV"); // Replace with your live publishable key
+        const { nonce } = await stripe.createEphemeralKeyNonce({
+          issuingCard: cardId,
+        });
+
+        // 2️⃣ Call your Cloud Function to get ephemeral key secret
+        const res = await fetch(
+          "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cardId, accountId, nonce }),
+          }
+        );
+        const data = await res.json();
+        if (!data.ephemeralKeySecret) {
+          alert("Error: " + data.error);
+          return;
+        }
+
+        // 3️⃣ Initialize Issuing Elements
+        const issuing = stripe.issuingElements({
+          clientSecret: data.ephemeralKeySecret,
+        });
+
+        const cardElement = issuing.create("cardDetail", {
+          style: { base: { fontSize: "16px" } },
+        });
+        cardElement.mount("#issuing-element");
+
+        // 4️⃣ Reveal card when button clicked
+        document.getElementById("show-btn").addEventListener("click", () => {
+          cardElement.show();
+        });
+      }
+
+      init();
+    </script>
+  </body>
+</html>
