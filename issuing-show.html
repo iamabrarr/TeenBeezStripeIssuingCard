@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Show Issuing Card Details - Final Corrected</title>
+    <title>Show Issuing Card Details - Corrected</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-      /* Basic styling for presentation */
       body { font-family: sans-serif; }
       #output {
         margin-top: 20px;
@@ -17,7 +16,7 @@
     </style>
   </head>
   <body>
-    <h2>Card Details Viewer 2</h2>
+    <h2>Card Details Viewer 3</h2>
     <p>Loading details for Card ID from URL...</p>
     
     <button id="showCardDetails">Show Card Details</button>
@@ -25,85 +24,75 @@
     <div id="output">Click 'Show Card Details' to proceed.</div>
 
     <script>
-      // Function to extract a parameter from the URL
+      // Helper: get query parameter from URL
       function getUrlParam(name) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(name);
       }
 
       document.getElementById("showCardDetails").addEventListener("click", async () => {
-        // --- 1. Fetch IDs from URL ---
-        const cardId = getUrlParam('cardId');
-        const accountId = getUrlParam('accountId');
+        const cardId = getUrlParam("cardId");
+        const accountId = getUrlParam("accountId");
         const output = document.getElementById("output");
-        
-        output.innerHTML = "Loading...";
 
-        // Input validation
+        output.textContent = "Loading card details...";
+
         if (!cardId || !accountId) {
           output.innerHTML = `<pre>Error: Missing required parameters in URL.</pre>
-          <p>Please ensure your URL looks like this: 
-          <code style="display:block;margin-top:5px;">.../page.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
+          <p>Example URL format: 
+          <code>.../page.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
           return;
         }
 
         try {
-          // 2. Initialize Stripe ONCE with your platform's publishable key.
-          // This object is used for both nonce creation and element creation.
-          // Replace 'pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV'
-          // with your actual Stripe publishable key.
-          const stripe = Stripe('pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV', {
-             stripeAccount: accountId,
-             apiVersion: "2024-04-10",
-          });
+          // Initialize Stripe client with connected account
+          const stripe = Stripe(
+            "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV",
+            { stripeAccount: accountId }
+          );
 
-          // 3. Generate Nonce on the client side
+          // Generate nonce for the issuing card
           const { nonce, error: nonceError } = await stripe.createEphemeralKeyNonce({
             issuingCard: cardId
           });
 
           if (nonceError) throw nonceError;
           if (!nonce) throw new Error("Nonce generation failed.");
-          
-          // 4. Call backend to create Ephemeral Key, passing the client-generated nonce
-          // NOTE: Update the Cloud Function URL to your live endpoint
-          const ephKeyResponse = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cardId,
-              
-              accountId,
-            }),
-          });
-          
-          const ephKeyData = await ephKeyResponse.json();
-          
-          // Check for success in the backend response
-          if (!ephKeyData.success) {
-            throw new Error(`Backend Error: ${ephKeyData.error || "Failed to create ephemeral key (no specific error message)."}`);
-          }
-          
-          // 🛑 CRITICAL CHECK: Ensure the secret is present
-          if (typeof ephKeyData.ephemeralKeySecret !== 'string' || !ephKeyData.ephemeralKeySecret.startsWith('ek_')) {
-             throw new Error("Backend failed to return a valid Ephemeral Key Secret.");
-          }
 
-          // Clear loading message
-          output.innerHTML = ""; 
-
-          // 5. Create and mount the Issuing Card Details Element using the existing stripe object
-          const detailsElement = stripe.createIssuingCardDetailsElement(
-            ephKeyData.ephemeralKeySecret, // Ephemeral Key Secret from backend
-            nonce // Original client-generated nonce
+          // Request backend to create ephemeral key
+          const response = await fetch(
+            "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cardId, nonce, accountId }),
+            }
           );
 
-          detailsElement.mount("#output");
+          const data = await response.json();
+
+          if (!data.success) {
+            throw new Error(
+              `Backend Error: ${data.error || "Failed to create ephemeral key"}`
+            );
+          }
+
+          if (!data.ephemeralKeySecret || !data.ephemeralKeySecret.startsWith("ek_")) {
+            throw new Error("Invalid ephemeral key returned from backend.");
+          }
+
+          // Create Issuing Card Details element
+          const elements = stripe.elements({
+            clientSecret: data.ephemeralKeySecret,
+          });
+
+          const cardDetails = elements.create("issuingCardDetails");
+          output.innerHTML = ""; // clear placeholder text
+          cardDetails.mount("#output");
 
         } catch (err) {
-          // Display the error message
+          console.error("Error showing card details:", err);
           output.innerHTML = `<pre>Error showing card details: ${err.message}</pre>`;
-          console.error(err);
         }
       });
     </script>
