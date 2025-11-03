@@ -1,148 +1,62 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>Show Issuing Card Details</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <script src="https://js.stripe.com/v3/"></script>
-  <style>
-    body { font-family: system-ui, -apple-system, Roboto, "Segoe UI", Arial; max-width:720px; margin:28px auto; padding:12px; }
-    h2 { margin-bottom: 8px; }
-    .card-container { margin: 12px 0; padding: 12px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .element { margin: 8px 0; }
-    button { padding: 10px 14px; border-radius: 8px; border: none; background:#6772e5; color:#fff; cursor:pointer; }
-    button:disabled { opacity: .6; cursor: default; }
-    #status { margin-top: 12px; color:#333; }
-  </style>
-</head>
-<body>
-  <h2>View Card Details</h2>
+  <head>
+    <meta charset="utf-8" />
+    <title>Show Stripe Issuing Card Details</title>
+    <script src="https://js.stripe.com/v3/"></script>
+  </head>
+  <body>
+    <h2>Stripe Issuing Card Details</h2>
+    <div id="card-details"></div>
+    <button id="showCardBtn">Show Card Details</button>
 
-  <div class="card-container">
-    <div id="card-number" class="element"></div>
-    <div id="card-expiry" class="element"></div>
-    <div id="card-cvc" class="element"></div>
-  </div>
+    <script>
+      const STRIPE_PUBLISHABLE_KEY = "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV";
+      const EPHEMERAL_FN_URL = "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
 
-  <button id="revealBtn">Show card numbers</button>
-  <div id="status"></div>
+      async function showCardDetails() {
+        const params = new URLSearchParams(window.location.search);
+        const cardId = params.get("cardId");
+        const accountId = params.get("accountId");
 
-  <script>
-    // ---------- CONFIG: set these to your values ----------
-    const STRIPE_PUBLISHABLE_KEY = "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV";
-    const EPHEMERAL_FN_URL = "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
-    // -----------------------------------------------------
-
-    const statusEl = document.getElementById("status");
-    const revealBtn = document.getElementById("revealBtn");
-
-    function setStatus(text) {
-      statusEl.textContent = text || "";
-    }
-
-    // Helper to get query params
-    function getParam(name) {
-      return new URLSearchParams(window.location.search).get(name);
-    }
-
-    async function createNonce(stripe, cardId) {
-      // create ephemeral-key nonce using Stripe.js
-      // newer stripe.js exposes createEphemeralKeyNonce; if not available, this will throw
-      setStatus("Creating nonce...");
-      if (typeof stripe.createEphemeralKeyNonce !== "function") {
-        throw new Error("stripe.createEphemeralKeyNonce is not available. Make sure you loaded the latest Stripe.js.");
-      }
-      const result = await stripe.createEphemeralKeyNonce({ issuingCard: cardId });
-      if (!result || !result.nonce) throw new Error("Failed to create nonce");
-      return result.nonce;
-    }
-
-    async function getEphemeralKeyFromServer(cardId, nonce, accountId) {
-      setStatus("Requesting ephemeral key from server...");
-      const res = await fetch(EPHEMERAL_FN_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId, nonce, accountId }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json && json.error ? json.error : `HTTP ${res.status}`);
-      }
-      if (!json.success || !json.ephemeralKeySecret) {
-        throw new Error(json.error || "No ephemeral key returned");
-      }
-      return json.ephemeralKeySecret;
-    }
-
-    async function initIssuingElements(stripePubKey, ephemeralKeySecret, cardId, accountId) {
-      setStatus("Initializing Issuing Elements...");
-      // Initialize stripe with publishable key
-      const stripe = Stripe(stripePubKey, { apiVersion: "2023-10-16" });
-
-      // Create issuingElements with client secret
-      const issuing = stripe.issuingElements({ clientSecret: ephemeralKeySecret });
-
-      // Create and mount display elements
-      const numberEl = issuing.create("issuingCardNumberDisplay", { issuingCard: cardId });
-      numberEl.mount("#card-number");
-
-      const expiryEl = issuing.create("issuingCardExpiryDisplay", { issuingCard: cardId });
-      expiryEl.mount("#card-expiry");
-
-      const cvcEl = issuing.create("issuingCardCvcDisplay", { issuingCard: cardId });
-      cvcEl.mount("#card-cvc");
-
-      setStatus("Elements mounted, press 'Show card numbers' to reveal");
-      // Stripe's Issuing Elements UI will display a Show numbers flow,
-      // user may have to complete a verification step handled by Stripe
-      return { stripe, issuing, numberEl, expiryEl, cvcEl };
-    }
-
-    async function flowReveal() {
-      try {
-        setStatus("");
-        revealBtn.disabled = true;
-
-        const cardId = getParam("cardId");
-        const accountId = getParam("accountId");
         if (!cardId || !accountId) {
           alert("Missing cardId or accountId in URL");
-          revealBtn.disabled = false;
           return;
         }
 
-        // 1) initialize a temporary Stripe instance for nonce creation
-        const stripeForNonce = Stripe(STRIPE_PUBLISHABLE_KEY);
+        try {
+          // Step 1: Request ephemeral key from backend
+          const response = await fetch(EPHEMERAL_FN_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cardId, accountId }),
+          });
 
-        // 2) create nonce client-side
-        const nonce = await createNonce(stripeForNonce, cardId);
-        console.log("nonce:", nonce);
+          const data = await response.json();
+          if (!data.success) throw new Error(data.error);
+          const ephemeralKeySecret = data.ephemeralKeySecret;
 
-        // 3) send nonce to backend to get ephemeral key secret
-        const ephemeralKeySecret = await getEphemeralKeyFromServer(cardId, nonce, accountId);
-        console.log("ephemeralKeySecret:", ephemeralKeySecret);
+          // Step 2: Initialize Stripe
+          const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
 
-        // 4) initialize issuing elements and mount displays
-        await initIssuingElements(STRIPE_PUBLISHABLE_KEY, ephemeralKeySecret, cardId, accountId);
+          // Step 3: Show card details using Stripe’s official UI
+          const result = await stripe.renderIssuingCardDetail({
+            ephemeralKeySecret: ephemeralKeySecret,
+            style: { base: { fontSize: "18px", color: "#000" } },
+            mount: "#card-details",
+          });
 
-        // 5) let Stripe's own UI handle reveal, inform user
-        setStatus("Ready, use the 'Show numbers' control embedded by Stripe to reveal the card.");
-      } catch (err) {
-        console.error(err);
-        alert("Error showing card details: " + (err.message || err));
-        setStatus("Error: " + (err.message || err));
-        revealBtn.disabled = false;
+          if (result.error) {
+            console.error(result.error);
+            alert("Error showing card details: " + result.error.message);
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Error showing card details: " + err.message);
+        }
       }
-    }
 
-    // auto-run if autoload params exist, otherwise wait for button
-    (function attach() {
-      revealBtn.addEventListener("click", flowReveal);
-
-      // optional: if you want immediate auto-run when page loads uncomment:
-      // const autoCard = getParam("cardId") && getParam("accountId");
-      // if (autoCard) flowReveal();
-    })();
-  </script>
-</body>
+      document.getElementById("showCardBtn").addEventListener("click", showCardDetails);
+    </script>
+  </body>
 </html>
