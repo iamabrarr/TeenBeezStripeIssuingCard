@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Show Issuing Card Details - URL Fetch 2</title>
+    <title>Show Issuing Card Details - Final Corrected</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-      /* Basic styling to show loading/error messages clearly */
+      /* Basic styling for presentation */
+      body { font-family: sans-serif; }
       #output {
         margin-top: 20px;
-        padding: 10px;
-        border: 1px solid #ccc;
+        padding: 15px;
+        border: 1px solid #ddd;
         min-height: 50px;
+        background-color: #f9f9f9;
         white-space: pre-wrap;
       }
     </style>
   </head>
   <body>
-    <h2>Card Details</h2>
+    <h2>Card Details Viewer</h2>
+    <p>Loading details for Card ID from URL...</p>
     
     <button id="showCardDetails">Show Card Details</button>
 
-    <div id="output">Click 'Show Card Details' to fetch the data from the URL.</div>
+    <div id="output">Click 'Show Card Details' to proceed.</div>
 
     <script>
       // Function to extract a parameter from the URL
@@ -36,16 +39,20 @@
         
         output.innerHTML = "Loading...";
 
+        // Input validation
         if (!cardId || !accountId) {
           output.innerHTML = `<pre>Error: Missing required parameters in URL.</pre>
-          <p>Example URL format: <code>.../page.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
+          <p>Please ensure your URL looks like this: 
+          <code style="display:block;margin-top:5px;">.../page.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
           return;
         }
 
         try {
-          // 2. Initialize Stripe with your platform's publishable key for nonce creation
-          // NOTE: Replace 'YOUR_PLATFORM_PUBLISHABLE_KEY' with your actual key
-          const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV", {
+          // 2. Initialize Stripe ONCE with your platform's publishable key.
+          // This object is used for both nonce creation and element creation.
+          // Replace 'pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV'
+          // with your actual Stripe publishable key.
+          const stripe = Stripe('pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV', {
              stripeAccount: accountId,
              apiVersion: "2023-10-16",
           });
@@ -58,8 +65,8 @@
           if (nonceError) throw nonceError;
           if (!nonce) throw new Error("Nonce generation failed.");
           
-          // 4. Create Ephemeral Key from backend, passing the client-generated nonce
-          // NOTE: Update the Cloud Function URL
+          // 4. Call backend to create Ephemeral Key, passing the client-generated nonce
+          // NOTE: Update the Cloud Function URL to your live endpoint
           const ephKeyResponse = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -71,25 +78,30 @@
           });
           
           const ephKeyData = await ephKeyResponse.json();
-          if (!ephKeyData.success) throw new Error(ephKeyData.error || "Failed to create ephemeral key");
-
-          // 5. Re-initialize Stripe for Element creation (using the same key)
-          const stripe_final = Stripe(ephKeyData.publishableKey, {
-            stripeAccount: accountId,
-            apiVersion: "2023-10-16", 
-          });
           
-          output.innerHTML = ""; // Clear loading message
+          // Check for success in the backend response
+          if (!ephKeyData.success) {
+            throw new Error(`Backend Error: ${ephKeyData.error || "Failed to create ephemeral key (no specific error message)."}`);
+          }
+          
+          // 🛑 CRITICAL CHECK: Ensure the secret is present
+          if (typeof ephKeyData.ephemeralKeySecret !== 'string' || !ephKeyData.ephemeralKeySecret.startsWith('ek_')) {
+             throw new Error("Backend failed to return a valid Ephemeral Key Secret.");
+          }
 
-          // 6. Create and mount the Issuing Card Details Element
-          const detailsElement = stripe_final.createIssuingCardDetailsElement(
-            ephKeyData.ephemeralKeySecret, 
-            nonce 
+          // Clear loading message
+          output.innerHTML = ""; 
+
+          // 5. Create and mount the Issuing Card Details Element using the existing stripe object
+          const detailsElement = stripe.createIssuingCardDetailsElement(
+            ephKeyData.ephemeralKeySecret, // Ephemeral Key Secret from backend
+            nonce // Original client-generated nonce
           );
 
           detailsElement.mount("#output");
 
         } catch (err) {
+          // Display the error message
           output.innerHTML = `<pre>Error showing card details: ${err.message}</pre>`;
           console.error(err);
         }
