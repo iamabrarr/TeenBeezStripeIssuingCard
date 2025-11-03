@@ -1,73 +1,66 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8" />
-    <title>Show Stripe Issuing Card Details</title>
+    <title>Show Issuing Card Details</title>
     <script src="https://js.stripe.com/v3/"></script>
   </head>
   <body>
-    <h2>Stripe Issuing Card Details 1</h2>
-    <div id="card-details">Loading...</div>
-    <button id="showCardBtn">Show Card Details</button>
+    <h2>Show Card Details</h2>
+
+    <input id="cardId" placeholder="Enter card ID" value="ic_XXXXXX" />
+    <input id="accountId" placeholder="Enter account ID" value="acct_XXXXXX" />
+    <button id="showCardDetails">Show Card Details</button>
+
+    <pre id="output"></pre>
 
     <script>
-      const STRIPE_PUBLISHABLE_KEY = "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV";
-      const FUNCTION_URL =
-        "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
-
-      async function showCardDetails() {
-        const params = new URLSearchParams(window.location.search);
-        const cardId = params.get("cardId");
-        const accountId = params.get("accountId");
-
-        if (!cardId || !accountId) {
-          alert("Missing cardId or accountId in URL");
-          return;
-        }
+      document.getElementById("showCardDetails").addEventListener("click", async () => {
+        const cardId = document.getElementById("cardId").value.trim();
+        const accountId = document.getElementById("accountId").value.trim();
+        const output = document.getElementById("output");
+        output.textContent = "Loading...";
 
         try {
-          // Step 1: Get ephemeral key from Firebase Function
-          const response = await fetch(FUNCTION_URL, {
+          // 1. Get nonce from backend (temporary card token)
+          const nonceResponse = await fetch("https://us-central1-YOUR_PROJECT.cloudfunctions.net/createNonce", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cardId, accountId }),
           });
+          const nonceData = await nonceResponse.json();
+          if (!nonceData.success) throw new Error(nonceData.error || "Failed to create nonce");
 
-          const data = await response.json();
-          if (!data.success) throw new Error(data.error);
-          const ephemeralKeySecret = data.ephemeralKeySecret;
+          // 2. Create ephemeral key from backend
+          const ephKeyResponse = await fetch("https://us-central1-YOUR_PROJECT.cloudfunctions.net/createIssuingEphemeralKey", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cardId,
+              nonce: nonceData.nonce,
+              accountId,
+            }),
+          });
+          const ephKeyData = await ephKeyResponse.json();
+          if (!ephKeyData.success) throw new Error(ephKeyData.error || "Failed to create ephemeral key");
 
-          // Step 2: Initialize Stripe with the ephemeral key
-          const stripe = Stripe(STRIPE_PUBLISHABLE_KEY, {
-            apiVersion: "2023-10-16",
+          // 3. Initialize Stripe with the ephemeral key and explicit API version
+          const stripe = Stripe(ephKeyData.publishableKey, {
+            stripeAccount: accountId,
+            apiVersion: "2023-10-16", // IMPORTANT: set same version here
           });
 
-          // Step 3: Retrieve the issuing card details securely
-          const result = await fetch("https://api.stripe.com/v1/issuing/cards/" + cardId, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${ephemeralKeySecret}`,
-            },
+          // 4. Show issuing card details
+          const result = await stripe.renderIssuingCardDetails({
+            ephemeralKeySecret: ephKeyData.ephemeralKeySecret,
+            nonce: nonceData.nonce,
+            element: "#output",
           });
 
-          const cardData = await result.json();
-          if (cardData.error) throw new Error(cardData.error.message);
-
-          // Step 4: Display the card details
-          document.getElementById("card-details").innerHTML = `
-            <p><strong>Card Number:</strong> ${cardData.number || "Hidden in live mode"}</p>
-            <p><strong>Expiry:</strong> ${cardData.exp_month}/${cardData.exp_year}</p>
-            <p><strong>CVC:</strong> ${cardData.cvc || "Hidden in live mode"}</p>
-          `;
+          if (result.error) throw result.error;
         } catch (err) {
-          console.error("Error:", err);
-          alert("Error showing card details: " + err.message);
+          output.textContent = "Error showing card details: " + err.message;
         }
-      }
-
-      document
-        .getElementById("showCardBtn")
-        .addEventListener("click", showCardDetails);
+      });
     </script>
   </body>
 </html>
