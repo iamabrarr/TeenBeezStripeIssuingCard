@@ -5,67 +5,74 @@
     <title>Show Stripe Issuing Card Details</title>
     <script src="https://js.stripe.com/v3/"></script>
   </head>
+
   <body>
     <h2>Stripe Issuing Card Details</h2>
 
-    <div id="card-number"></div>
-    <div id="card-expiry"></div>
-    <div id="card-cvc"></div>
-
+    <div id="card-details"></div>
     <button id="showCardBtn">Show Card Details</button>
 
     <script>
       async function showCardDetails() {
-        const params = new URLSearchParams(window.location.search);
-        const cardId = params.get("cardId");
-        const accountId = params.get("accountId");
-
-        if (!cardId || !accountId) {
-          alert("Missing cardId or accountId");
-          return;
-        }
-
-        const functionUrl =
-          "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
-
         try {
-          // 1. Create ephemeral key (with dummy nonce)
+          // Step 1: Get URL parameters
+          const params = new URLSearchParams(window.location.search);
+          const cardId = params.get("cardId");
+          const accountId = params.get("accountId");
+          const nonce = params.get("nonce");
+
+          if (!cardId || !accountId || !nonce) {
+            alert("Missing cardId, accountId, or nonce in URL");
+            return;
+          }
+
+          console.log("Params:", { cardId, accountId, nonce });
+
+          // Step 2: Call your Firebase Function to create an ephemeral key
+          const functionUrl =
+            "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
+
           const response = await fetch(functionUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cardId,
-              nonce: "fake_nonce_" + Math.random().toString(36).substring(2),
-              accountId,
-            }),
+            body: JSON.stringify({ cardId, nonce, accountId }),
           });
 
           const data = await response.json();
-          if (!data.success) throw new Error(data.error || "Ephemeral key failed");
+          console.log("Ephemeral Key Response:", data);
+
+          if (!data.success || !data.ephemeralKeySecret) {
+            throw new Error(data.error || "Failed to create ephemeral key");
+          }
 
           const ephemeralKeySecret = data.ephemeralKeySecret;
 
-          // 2. Initialize Stripe with your publishable key
-          const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV", {
-            stripeAccount: accountId,
+          // Step 3: Initialize Stripe
+          const stripe = Stripe(ephemeralKeySecret, {
+            apiVersion: "2023-10-16",
           });
 
-          // 3. Mount the Issuing Card Number Element
-          const elements = stripe.elements({ clientSecret: ephemeralKeySecret });
-          const cardNumber = elements.create("issuingCardNumberDisplay", {
-            issuingCard: cardId,
-          });
-          cardNumber.mount("#card-number");
+          // Step 4: Retrieve card details using ephemeral key
+          const cardResponse = await fetch(
+            `https://api.stripe.com/v1/issuing/cards/${cardId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${ephemeralKeySecret}`,
+              },
+            }
+          );
 
-          const cardExpiry = elements.create("issuingCardExpiryDisplay", {
-            issuingCard: cardId,
-          });
-          cardExpiry.mount("#card-expiry");
+          const card = await cardResponse.json();
+          console.log("Card details:", card);
 
-          const cardCvc = elements.create("issuingCardCvcDisplay", {
-            issuingCard: cardId,
-          });
-          cardCvc.mount("#card-cvc");
+          if (card.error) throw new Error(card.error.message);
+
+          // Step 5: Display the card details
+          document.getElementById("card-details").innerHTML = `
+            <p><strong>Card Number:</strong> ${card.number || "Hidden"}</p>
+            <p><strong>Expiry:</strong> ${card.exp_month}/${card.exp_year}</p>
+            <p><strong>CVC:</strong> ${card.cvc || "Hidden"}</p>
+          `;
         } catch (err) {
           console.error("Error:", err);
           alert("Error showing card details: " + err.message);
