@@ -1,87 +1,148 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Show Stripe Issuing Card Details</title>
-    <script src="https://js.stripe.com/v3/"></script>
-  </head>
+<head>
+  <meta charset="utf-8" />
+  <title>Show Issuing Card Details</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Roboto, "Segoe UI", Arial; max-width:720px; margin:28px auto; padding:12px; }
+    h2 { margin-bottom: 8px; }
+    .card-container { margin: 12px 0; padding: 12px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .element { margin: 8px 0; }
+    button { padding: 10px 14px; border-radius: 8px; border: none; background:#6772e5; color:#fff; cursor:pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+    #status { margin-top: 12px; color:#333; }
+  </style>
+</head>
+<body>
+  <h2>View Card Details</h2>
 
-  <body>
-    <h2>Stripe Issuing Card Details</h2>
+  <div class="card-container">
+    <div id="card-number" class="element"></div>
+    <div id="card-expiry" class="element"></div>
+    <div id="card-cvc" class="element"></div>
+  </div>
 
-    <div id="card-details"></div>
-    <button id="showCardBtn">Show Card Details</button>
+  <button id="revealBtn">Show card numbers</button>
+  <div id="status"></div>
 
-    <script>
-      async function showCardDetails() {
-        try {
-          // Step 1: Get URL parameters
-          const params = new URLSearchParams(window.location.search);
-          const cardId = params.get("cardId");
-          const accountId = params.get("accountId");
-          const nonce = params.get("nonce");
+  <script>
+    // ---------- CONFIG: set these to your values ----------
+    const STRIPE_PUBLISHABLE_KEY = "pk_test_or_live_YOUR_PUBLISHABLE_KEY";
+    const EPHEMERAL_FN_URL = "https://us-central1-YOUR_PROJECT.cloudfunctions.net/createIssuingEphemeralKey";
+    // -----------------------------------------------------
 
-          if (!cardId || !accountId || !nonce) {
-            alert("Missing cardId, accountId, or nonce in URL");
-            return;
-          }
+    const statusEl = document.getElementById("status");
+    const revealBtn = document.getElementById("revealBtn");
 
-          console.log("Params:", { cardId, accountId, nonce });
+    function setStatus(text) {
+      statusEl.textContent = text || "";
+    }
 
-          // Step 2: Call your Firebase Function to create an ephemeral key
-          const functionUrl =
-            "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey";
+    // Helper to get query params
+    function getParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
 
-          const response = await fetch(functionUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cardId, nonce, accountId }),
-          });
-
-          const data = await response.json();
-          console.log("Ephemeral Key Response:", data);
-
-          if (!data.success || !data.ephemeralKeySecret) {
-            throw new Error(data.error || "Failed to create ephemeral key");
-          }
-
-          const ephemeralKeySecret = data.ephemeralKeySecret;
-
-          // Step 3: Initialize Stripe
-          const stripe = Stripe(ephemeralKeySecret, {
-            apiVersion: "2023-10-16",
-          });
-
-          // Step 4: Retrieve card details using ephemeral key
-          const cardResponse = await fetch(
-            `https://api.stripe.com/v1/issuing/cards/${cardId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${ephemeralKeySecret}`,
-              },
-            }
-          );
-
-          const card = await cardResponse.json();
-          console.log("Card details:", card);
-
-          if (card.error) throw new Error(card.error.message);
-
-          // Step 5: Display the card details
-          document.getElementById("card-details").innerHTML = `
-            <p><strong>Card Number:</strong> ${card.number || "Hidden"}</p>
-            <p><strong>Expiry:</strong> ${card.exp_month}/${card.exp_year}</p>
-            <p><strong>CVC:</strong> ${card.cvc || "Hidden"}</p>
-          `;
-        } catch (err) {
-          console.error("Error:", err);
-          alert("Error showing card details: " + err.message);
-        }
+    async function createNonce(stripe, cardId) {
+      // create ephemeral-key nonce using Stripe.js
+      // newer stripe.js exposes createEphemeralKeyNonce; if not available, this will throw
+      setStatus("Creating nonce...");
+      if (typeof stripe.createEphemeralKeyNonce !== "function") {
+        throw new Error("stripe.createEphemeralKeyNonce is not available. Make sure you loaded the latest Stripe.js.");
       }
+      const result = await stripe.createEphemeralKeyNonce({ issuingCard: cardId });
+      if (!result || !result.nonce) throw new Error("Failed to create nonce");
+      return result.nonce;
+    }
 
-      document
-        .getElementById("showCardBtn")
-        .addEventListener("click", showCardDetails);
-    </script>
-  </body>
+    async function getEphemeralKeyFromServer(cardId, nonce, accountId) {
+      setStatus("Requesting ephemeral key from server...");
+      const res = await fetch(EPHEMERAL_FN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId, nonce, accountId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json && json.error ? json.error : `HTTP ${res.status}`);
+      }
+      if (!json.success || !json.ephemeralKeySecret) {
+        throw new Error(json.error || "No ephemeral key returned");
+      }
+      return json.ephemeralKeySecret;
+    }
+
+    async function initIssuingElements(stripePubKey, ephemeralKeySecret, cardId, accountId) {
+      setStatus("Initializing Issuing Elements...");
+      // Initialize stripe with publishable key
+      const stripe = Stripe(stripePubKey, { apiVersion: "2023-10-16" });
+
+      // Create issuingElements with client secret
+      const issuing = stripe.issuingElements({ clientSecret: ephemeralKeySecret });
+
+      // Create and mount display elements
+      const numberEl = issuing.create("issuingCardNumberDisplay", { issuingCard: cardId });
+      numberEl.mount("#card-number");
+
+      const expiryEl = issuing.create("issuingCardExpiryDisplay", { issuingCard: cardId });
+      expiryEl.mount("#card-expiry");
+
+      const cvcEl = issuing.create("issuingCardCvcDisplay", { issuingCard: cardId });
+      cvcEl.mount("#card-cvc");
+
+      setStatus("Elements mounted, press 'Show card numbers' to reveal");
+      // Stripe's Issuing Elements UI will display a Show numbers flow,
+      // user may have to complete a verification step handled by Stripe
+      return { stripe, issuing, numberEl, expiryEl, cvcEl };
+    }
+
+    async function flowReveal() {
+      try {
+        setStatus("");
+        revealBtn.disabled = true;
+
+        const cardId = getParam("cardId");
+        const accountId = getParam("accountId");
+        if (!cardId || !accountId) {
+          alert("Missing cardId or accountId in URL");
+          revealBtn.disabled = false;
+          return;
+        }
+
+        // 1) initialize a temporary Stripe instance for nonce creation
+        const stripeForNonce = Stripe(STRIPE_PUBLISHABLE_KEY);
+
+        // 2) create nonce client-side
+        const nonce = await createNonce(stripeForNonce, cardId);
+        console.log("nonce:", nonce);
+
+        // 3) send nonce to backend to get ephemeral key secret
+        const ephemeralKeySecret = await getEphemeralKeyFromServer(cardId, nonce, accountId);
+        console.log("ephemeralKeySecret:", ephemeralKeySecret);
+
+        // 4) initialize issuing elements and mount displays
+        await initIssuingElements(STRIPE_PUBLISHABLE_KEY, ephemeralKeySecret, cardId, accountId);
+
+        // 5) let Stripe's own UI handle reveal, inform user
+        setStatus("Ready, use the 'Show numbers' control embedded by Stripe to reveal the card.");
+      } catch (err) {
+        console.error(err);
+        alert("Error showing card details: " + (err.message || err));
+        setStatus("Error: " + (err.message || err));
+        revealBtn.disabled = false;
+      }
+    }
+
+    // auto-run if autoload params exist, otherwise wait for button
+    (function attach() {
+      revealBtn.addEventListener("click", flowReveal);
+
+      // optional: if you want immediate auto-run when page loads uncomment:
+      // const autoCard = getParam("cardId") && getParam("accountId");
+      // if (autoCard) flowReveal();
+    })();
+  </script>
+</body>
 </html>
