@@ -1,98 +1,64 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Show Issuing Card Details - Corrected</title>
+    <title>Card Details</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-      body { font-family: sans-serif; }
-      #output {
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #ddd;
-        min-height: 50px;
-        background-color: #f9f9f9;
-        white-space: pre-wrap;
-      }
+      body { font-family: Arial, sans-serif; padding: 30px; background: #f9f9f9; }
+      .card-info { display: flex; flex-direction: column; gap: 15px; max-width: 400px; margin: auto; }
+      .stripe-element { padding: 12px; border: 1px solid #ccc; border-radius: 8px; background: white; }
     </style>
   </head>
   <body>
-    <h2>Card Details Viewer</h2>
-    <p>Loading details for Card ID from URL...</p>
-    
-    <button id="showCardDetails">Show Card Details</button>
-
-    <div id="output">Click 'Show Card Details' to proceed.</div>
+    <h2 style="text-align:center;">Secure Card Details</h2>
+    <div class="card-info">
+      <div id="card-number" class="stripe-element"></div>
+      <div id="card-expiry" class="stripe-element"></div>
+      <div id="card-cvc" class="stripe-element"></div>
+    </div>
 
     <script>
-      // Helper to extract query parameters from URL
-      function getUrlParam(name) {
+      (async () => {
+        // Read cardId and accountId from URL
         const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
-      }
-
-      document.getElementById("showCardDetails").addEventListener("click", async () => {
-        const cardId = getUrlParam("cardId");
-        const accountId = getUrlParam("accountId");
-        const output = document.getElementById("output");
-
-        output.textContent = "Loading card details...";
+        const cardId = urlParams.get("cardId");
+        const accountId = urlParams.get("accountId");
 
         if (!cardId || !accountId) {
-          output.innerHTML = `<pre>Error: Missing required parameters in URL.</pre>
-          <p>Example URL format: 
-          <code>.../show-card.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
+          alert("Missing cardId or accountId in URL");
           return;
         }
 
-        try {
-          // Initialize Stripe with connected account
-          const stripe = Stripe(
-            "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV",
-            { stripeAccount: accountId }
-          );
-
-          // 1. Generate nonce for the issuing card
-          const { nonce, error: nonceError } = await stripe.createEphemeralKeyNonce({
-            issuingCard: cardId
-          });
-
-          if (nonceError) throw nonceError;
-          if (!nonce) throw new Error("Nonce generation failed.");
-
-          // 2. Call backend to reveal card and get client_secret
-          const response = await fetch(
-            "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cardId, nonce, accountId }),
-            }
-          );
-
-          const data = await response.json();
-
-          if (!data.success) {
-            throw new Error(data.error || "Backend failed to create client secret");
-          }
-
-          if (!data.clientSecret || !data.clientSecret.includes("_secret_")) {
-            throw new Error("Invalid client secret returned from backend.");
-          }
-
-          // 3. Create and mount the Issuing Card Details element
-          const elements = stripe.elements({
-            clientSecret: data.clientSecret,
-          });
-
-          const cardDetails = elements.create("issuingCardDetails");
-          output.innerHTML = "";
-          cardDetails.mount("#output");
-
-        } catch (err) {
-          console.error("Error showing card details:", err);
-          output.innerHTML = `<pre>Error showing card details: ${err.message}</pre>`;
+        // Call your Cloud Function to create an ephemeral key
+        const res = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardId, accountId })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert("Error: " + data.error);
+          return;
         }
-      });
+
+        // Initialize Stripe with your publishable key
+        const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV", {
+          stripeAccount: accountId,
+        });
+
+        const elements = stripe.elements({
+          clientSecret: data.ephemeralKeySecret
+        });
+
+        // Create secure Stripe-hosted elements
+        const cardNumber = elements.create("issuingCardNumber");
+        const cardExpiry = elements.create("issuingCardExpiry");
+        const cardCvc = elements.create("issuingCardCvc");
+
+        cardNumber.mount("#card-number");
+        cardExpiry.mount("#card-expiry");
+        cardCvc.mount("#card-cvc");
+      })();
     </script>
   </body>
 </html>
