@@ -16,7 +16,7 @@
     </style>
   </head>
   <body>
-    <h2>Card Details Viewer 3</h2>
+    <h2>Card Details Viewer</h2>
     <p>Loading details for Card ID from URL...</p>
     
     <button id="showCardDetails">Show Card Details</button>
@@ -24,7 +24,7 @@
     <div id="output">Click 'Show Card Details' to proceed.</div>
 
     <script>
-      // Helper: get query parameter from URL
+      // Helper to extract query parameters from URL
       function getUrlParam(name) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(name);
@@ -40,18 +40,18 @@
         if (!cardId || !accountId) {
           output.innerHTML = `<pre>Error: Missing required parameters in URL.</pre>
           <p>Example URL format: 
-          <code>.../page.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
+          <code>.../show-card.html?cardId=ic_XXXXXX&accountId=acct_XXXXXX</code></p>`;
           return;
         }
 
         try {
-          // Initialize Stripe client with connected account
+          // Initialize Stripe with connected account
           const stripe = Stripe(
             "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV",
             { stripeAccount: accountId }
           );
 
-          // Generate nonce for the issuing card
+          // 1. Generate nonce for the issuing card
           const { nonce, error: nonceError } = await stripe.createEphemeralKeyNonce({
             issuingCard: cardId
           });
@@ -59,7 +59,7 @@
           if (nonceError) throw nonceError;
           if (!nonce) throw new Error("Nonce generation failed.");
 
-          // Request backend to create ephemeral key
+          // 2. Call backend to reveal card and get client_secret
           const response = await fetch(
             "https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey",
             {
@@ -72,22 +72,20 @@
           const data = await response.json();
 
           if (!data.success) {
-            throw new Error(
-              `Backend Error: ${data.error || "Failed to create ephemeral key"}`
-            );
+            throw new Error(data.error || "Backend failed to create client secret");
           }
 
-          if (!data.ephemeralKeySecret || !data.ephemeralKeySecret.startsWith("ek_")) {
-            throw new Error("Invalid ephemeral key returned from backend.");
+          if (!data.clientSecret || !data.clientSecret.includes("_secret_")) {
+            throw new Error("Invalid client secret returned from backend.");
           }
 
-          // Create Issuing Card Details element
+          // 3. Create and mount the Issuing Card Details element
           const elements = stripe.elements({
-            clientSecret: data.ephemeralKeySecret,
+            clientSecret: data.clientSecret,
           });
 
           const cardDetails = elements.create("issuingCardDetails");
-          output.innerHTML = ""; // clear placeholder text
+          output.innerHTML = "";
           cardDetails.mount("#output");
 
         } catch (err) {
