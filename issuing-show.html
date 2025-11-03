@@ -10,7 +10,7 @@
     </style>
   </head>
   <body>
-    <h2 style="text-align:center;">Secure Card Details</h2>
+    <h2 style="text-align:center;">Secure Card Details 2</h2>
     <div class="card-info">
       <div id="card-number" class="stripe-element"></div>
       <div id="card-expiry" class="stripe-element"></div>
@@ -44,6 +44,7 @@
         // Initialize Stripe with your publishable key
         const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV", {
           stripeAccount: accountId,
+          apiVersion: "2025-10-29"
         });
 
         const elements = stripe.elements({
