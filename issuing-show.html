@@ -23,42 +23,55 @@
         const urlParams = new URLSearchParams(window.location.search);
         const cardId = urlParams.get("cardId");
         const accountId = urlParams.get("accountId");
-
         if (!cardId || !accountId) {
           alert("Missing cardId or accountId in URL");
           return;
         }
 
-        // Call your Cloud Function to create an ephemeral key
-        const res = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cardId, accountId })
-        });
-        const data = await res.json();
-        if (!data.success) {
-          alert("Error: " + data.error);
-          return;
-        }
-
-        // Initialize Stripe with your publishable key
+        // Initialize Stripe with your publishable key and connected accountId
         const stripe = Stripe("pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV", {
           stripeAccount: accountId,
           apiVersion: "2023-10-16"
         });
 
-        const elements = stripe.elements({
-          clientSecret: data.ephemeralKeySecret
-        });
+        try {
+          // Create ephemeral key nonce for the cardId
+          const nonceResult = await stripe.createEphemeralKeyNonce({ issuingCard: cardId });
+          const nonce = nonceResult.nonce;
 
-        // Create secure Stripe-hosted elements
-        const cardNumber = elements.create("issuingCardNumber");
-        const cardExpiry = elements.create("issuingCardExpiry");
-        const cardCvc = elements.create("issuingCardCvc");
+          // Call your Cloud Function with cardId, accountId, and nonce to get ephemeralKeySecret
+          const res = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cardId, accountId, nonce })
+          });
+          const data = await res.json();
 
-        cardNumber.mount("#card-number");
-        cardExpiry.mount("#card-expiry");
-        cardCvc.mount("#card-cvc");
+          if (!data.success) {
+            alert("Error: " + data.error);
+            return;
+          }
+
+          // Create elements with issuingCard, nonce, and ephemeralKeySecret
+          const elements = stripe.elements({
+            issuingCard: cardId,
+            nonce: nonce,
+            ephemeralKeySecret: data.ephemeralKeySecret,
+          });
+
+          // Create "Display" elements to show card details securely
+          const cardNumber = elements.create("issuingCardNumberDisplay");
+          const cardExpiry = elements.create("issuingCardExpiryDisplay");
+          const cardCvc = elements.create("issuingCardCvcDisplay");
+
+          // Mount the elements in the DOM
+          cardNumber.mount("#card-number");
+          cardExpiry.mount("#card-expiry");
+          cardCvc.mount("#card-cvc");
+        } catch (error) {
+          alert("Unexpected error: " + error.message);
+          console.error(error);
+        }
       })();
     </script>
   </body>
