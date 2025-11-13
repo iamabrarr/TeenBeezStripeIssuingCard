@@ -205,17 +205,42 @@
 
             .card-balance {
                 font-size: 28px;
-                margin-bottom: 35px;
+                margin-bottom: 30px;
             }
 
             .card-details {
                 bottom: 20px;
                 left: 20px;
                 right: 20px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 18px;
+            }
+
+            .card-number-container {
+                width: 100%;
             }
 
             .card-right-details {
-                gap: 15px;
+                width: 100%;
+                justify-content: flex-start;
+                gap: 25px;
+            }
+
+            .card-expiry-container {
+                text-align: left;
+            }
+
+            .card-cvc-container {
+                text-align: left;
+            }
+
+            #card-expiry {
+                text-align: left;
+            }
+
+            #card-cvc {
+                text-align: left;
             }
 
             .stripe-element {
@@ -235,21 +260,18 @@
 
             .card-balance {
                 font-size: 24px;
+                margin-bottom: 25px;
             }
 
             .card-details {
                 bottom: 16px;
                 left: 16px;
                 right: 16px;
-                flex-direction: column;
-                align-items: flex-start;
                 gap: 15px;
             }
 
             .card-right-details {
-                width: 100%;
-                justify-content: space-between;
-                gap: 10px;
+                gap: 20px;
             }
 
             .stripe-element {
