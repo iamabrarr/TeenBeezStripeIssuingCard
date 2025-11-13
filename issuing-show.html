@@ -116,20 +116,10 @@
         align-items: center;
       }
 
-      .detail-value.loading::after {
-        content: '';
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        margin-left: 8px;
-        background: white;
-        border-radius: 50%;
-        animation: pulse 1.5s infinite;
-      }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
+      .detail-value iframe {
+        width: 100%;
+        border: none;
+        background: transparent;
       }
 
       .error-message {
@@ -140,11 +130,6 @@
         font-size: 14px;
         margin-top: 20px;
         text-align: center;
-      }
-
-      /* Hidden Stripe elements for fetching data */
-      .stripe-element {
-        display: none;
       }
     </style>
   </head>
@@ -163,18 +148,18 @@
             <div class="detail-row">
               <div class="detail-field">
                 <span class="detail-label">Card Number</span>
-                <div id="card-number" class="detail-value loading"></div>
+                <div id="card-number" class="detail-value"></div>
               </div>
             </div>
             
             <div class="detail-row">
               <div class="detail-field">
                 <span class="detail-label">Expiry Date</span>
-                <div id="card-expiry" class="detail-value loading"></div>
+                <div id="card-expiry" class="detail-value"></div>
               </div>
               <div class="detail-field" style="flex: 0.4; margin-left: 30px;">
                 <span class="detail-label">CVC</span>
-                <div id="card-cvc" class="detail-value loading"></div>
+                <div id="card-cvc" class="detail-value"></div>
               </div>
             </div>
           </div>
@@ -183,11 +168,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Hidden Stripe elements for fetching data -->
-    <div id="stripe-card-number" class="stripe-element"></div>
-    <div id="stripe-card-expiry" class="stripe-element"></div>
-    <div id="stripe-card-cvc" class="stripe-element"></div>
 
     <script>
       (async () => {
@@ -223,24 +203,28 @@
           
           const ephemeralKeySecret = data.ephemeralKeySecret;
           const elements = stripe.elements();
-          
-          const mountElement = (elementType, displayId, format) => {
-            const el = elements.create(elementType, { issuingCard: cardId, nonce, ephemeralKeySecret });
-            el.mount("#" + displayId);
-            el.on("change", (e) => {
-              let value = "";
-              if (elementType === "issuingCardNumberDisplay") value = e.value?.cardNumber || "";
-              if (elementType === "issuingCardExpiryDisplay") {
-                value = e.value?.expiryMonth && e.value?.expiryYear ? `${e.value.expiryMonth}/${e.value.expiryYear}` : "";
-              }
-              if (elementType === "issuingCardCvcDisplay") value = e.value?.cvc || "";
-              updateDisplay(displayId, value);
-            });
-          };
-          
-          mountElement("issuingCardNumberDisplay", "card-number");
-          mountElement("issuingCardExpiryDisplay", "card-expiry");
-          mountElement("issuingCardCvcDisplay", "card-cvc");
+
+          // Mount Stripe secure displays directly
+          elements.create("issuingCardNumberDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+            style: { base: { color: "white", fontSize: "16px", fontFamily: "Courier New" } }
+          }).mount("#card-number");
+
+          elements.create("issuingCardExpiryDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+            style: { base: { color: "white", fontSize: "16px", fontFamily: "Courier New" } }
+          }).mount("#card-expiry");
+
+          elements.create("issuingCardCvcDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+            style: { base: { color: "white", fontSize: "16px", fontFamily: "Courier New" } }
+          }).mount("#card-cvc");
 
         } catch (error) {
           showError("Unexpected error: " + error.message);
@@ -248,14 +232,6 @@
         }
       })();
       
-      function updateDisplay(id, value) {
-        const el = document.getElementById(id);
-        if (el) {
-          el.classList.remove("loading");
-          el.textContent = value || "••••";
-        }
-      }
-
       function showError(message) {
         const container = document.getElementById("error-container");
         container.innerHTML = `<div class="error-message">${message}</div>`;
