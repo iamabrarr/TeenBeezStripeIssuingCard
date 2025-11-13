@@ -230,8 +230,9 @@
         }
 
         .spinner {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
+            position: relative;
         }
 
         .spinner svg {
@@ -240,30 +241,31 @@
             transform: rotate(-90deg);
         }
 
-        .spinner circle {
-            fill: #7b2ff7;
+        .spinner .background-circle {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.2);
+            stroke-width: 4;
+        }
+
+        .spinner .progress-circle {
+            fill: none;
             stroke: white;
             stroke-width: 4;
             stroke-linecap: round;
             stroke-dasharray: 125.6;
             stroke-dashoffset: 125.6;
-            animation: spin 1.5s linear infinite;
+            transition: stroke-dashoffset 0.5s ease;
         }
 
-        @keyframes spin {
-            0% {
-                stroke-dashoffset: 125.6;
-                transform: rotate(0deg);
-            }
-
-            50% {
-                stroke-dashoffset: 31.4;
-            }
-
-            100% {
-                stroke-dashoffset: 125.6;
-                transform: rotate(360deg);
-            }
+        .spinner .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         }
 
         /* Mobile Responsive */
@@ -282,8 +284,12 @@
             }
 
             .spinner {
-                width: 40px;
-                height: 40px;
+                width: 50px;
+                height: 50px;
+            }
+
+            .spinner .progress-text {
+                font-size: 11px;
             }
 
             .card-title {
@@ -356,8 +362,12 @@
             }
 
             .spinner {
-                width: 35px;
-                height: 35px;
+                width: 45px;
+                height: 45px;
+            }
+
+            .spinner .progress-text {
+                font-size: 10px;
             }
 
             .card-balance {
@@ -404,8 +414,10 @@
             <div class="loading-overlay" id="loading-overlay">
                 <div class="spinner">
                     <svg viewBox="0 0 50 50">
-                        <circle cx="25" cy="25" r="20"></circle>
+                        <circle class="background-circle" cx="25" cy="25" r="20"></circle>
+                        <circle class="progress-circle" id="progress-circle" cx="25" cy="25" r="20"></circle>
                     </svg>
+                    <div class="progress-text" id="progress-text">0%</div>
                 </div>
             </div>
             <div class="card-header">
@@ -522,6 +534,23 @@
                 let loadingHidden = false;
                 let readyCount = 0;
                 let hideTimeout = null;
+                const circumference = 125.6; // 2 * π * 20
+
+                // Update progress indicator
+                const updateProgress = (progress) => {
+                    const progressCircle = document.getElementById('progress-circle');
+                    const progressText = document.getElementById('progress-text');
+
+                    if (progressCircle && progressText) {
+                        const percentage = Math.min(100, Math.max(0, progress));
+                        const offset = circumference - (circumference * percentage / 100);
+                        progressCircle.style.strokeDashoffset = offset;
+                        progressText.textContent = Math.round(percentage) + '%';
+                    }
+                };
+
+                // Initialize progress at 0%
+                updateProgress(0);
 
                 const hideLoading = () => {
                     if (loadingHidden) return;
@@ -533,6 +562,9 @@
                         hideTimeout = null;
                     }
 
+                    // Set progress to 100% before hiding
+                    updateProgress(100);
+
                     const loadingOverlay = document.getElementById('loading-overlay');
                     if (loadingOverlay && !loadingOverlay.classList.contains('hidden')) {
                         loadingOverlay.classList.add('hidden');
@@ -542,6 +574,10 @@
                 // Check if elements are ready
                 const checkReady = () => {
                     readyCount++;
+                    // Update progress: 33% per element
+                    const progress = (readyCount / 3) * 100;
+                    updateProgress(progress);
+
                     // Only hide when all 3 are ready
                     if (readyCount >= 3 && !loadingHidden) {
                         // Small delay to ensure elements are fully rendered
@@ -589,6 +625,18 @@
                         const hasNumber = cardNumberEl.children.length > 0 || cardNumberEl.querySelector('iframe');
                         const hasExpiry = cardExpiryEl.children.length > 0 || cardExpiryEl.querySelector('iframe');
                         const hasCvc = cardCvcEl.children.length > 0 || cardCvcEl.querySelector('iframe');
+
+                        // Update progress based on content detection
+                        let contentCount = 0;
+                        if (hasNumber) contentCount++;
+                        if (hasExpiry) contentCount++;
+                        if (hasCvc) contentCount++;
+
+                        // Use the higher of readyCount progress or contentCount progress
+                        const contentProgress = (contentCount / 3) * 100;
+                        const readyProgress = (readyCount / 3) * 100;
+                        const currentProgress = Math.max(contentProgress, readyProgress);
+                        updateProgress(currentProgress);
 
                         if ((hasNumber && hasExpiry && hasCvc) || readyCount >= 3) {
                             hideLoading();
