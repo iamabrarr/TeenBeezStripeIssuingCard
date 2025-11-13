@@ -188,6 +188,64 @@
             text-align: right;
         }
 
+        /* Loading Indicator */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #00d4ff 0%, #7b2ff7 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+        }
+
+        .spinner svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .spinner circle {
+            fill: none;
+            stroke: white;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 125.6;
+            stroke-dashoffset: 125.6;
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                stroke-dashoffset: 125.6;
+                transform: rotate(0deg);
+            }
+
+            50% {
+                stroke-dashoffset: 31.4;
+            }
+
+            100% {
+                stroke-dashoffset: 125.6;
+                transform: rotate(360deg);
+            }
+        }
+
         /* Mobile Responsive */
         @media (max-width: 480px) {
             body {
@@ -197,6 +255,15 @@
             .card {
                 padding: 20px;
                 border-radius: 16px;
+            }
+
+            .loading-overlay {
+                border-radius: 16px;
+            }
+
+            .spinner {
+                width: 40px;
+                height: 40px;
             }
 
             .card-title {
@@ -258,6 +325,15 @@
                 padding: 16px;
             }
 
+            .loading-overlay {
+                border-radius: 14px;
+            }
+
+            .spinner {
+                width: 35px;
+                height: 35px;
+            }
+
             .card-balance {
                 font-size: 24px;
                 margin-bottom: 25px;
@@ -291,6 +367,13 @@
 <body>
     <div class="container">
         <div class="card">
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="spinner">
+                    <svg viewBox="0 0 50 50">
+                        <circle cx="25" cy="25" r="20"></circle>
+                    </svg>
+                </div>
+            </div>
             <div class="card-header">
                 <div class="card-title">Virtual Card</div>
                 <div class="active-badge">Active</div>
@@ -393,7 +476,37 @@
                 });
                 cardCvcDisplay.mount("#card-cvc");
 
+                // Wait for all elements to be ready, then hide loading
+                Promise.all([
+                    new Promise(resolve => {
+                        cardNumberDisplay.on('ready', resolve);
+                        // Fallback timeout
+                        setTimeout(resolve, 1000);
+                    }),
+                    new Promise(resolve => {
+                        cardExpiryDisplay.on('ready', resolve);
+                        setTimeout(resolve, 1000);
+                    }),
+                    new Promise(resolve => {
+                        cardCvcDisplay.on('ready', resolve);
+                        setTimeout(resolve, 1000);
+                    })
+                ]).then(() => {
+                    // Small delay to ensure elements are fully rendered
+                    setTimeout(() => {
+                        const loadingOverlay = document.getElementById('loading-overlay');
+                        if (loadingOverlay) {
+                            loadingOverlay.classList.add('hidden');
+                        }
+                    }, 300);
+                });
+
             } catch (error) {
+                // Hide loading on error
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('hidden');
+                }
                 alert("Unexpected error: " + error.message);
                 console.error(error);
             }
