@@ -226,6 +226,7 @@
         .loading-overlay.hidden {
             opacity: 0;
             pointer-events: none;
+            display: none !important;
         }
 
         .spinner {
@@ -517,49 +518,99 @@
                 });
                 cardCvcDisplay.mount("#card-cvc");
 
-                // Flag to ensure loading is only hidden once
+                // Flag to ensure loading is only hidden once - stored in closure
                 let loadingHidden = false;
+                let readyCount = 0;
+                let hideTimeout = null;
+
                 const hideLoading = () => {
                     if (loadingHidden) return;
                     loadingHidden = true;
+
+                    // Clear any pending timeouts
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                        hideTimeout = null;
+                    }
+
                     const loadingOverlay = document.getElementById('loading-overlay');
-                    if (loadingOverlay) {
+                    if (loadingOverlay && !loadingOverlay.classList.contains('hidden')) {
                         loadingOverlay.classList.add('hidden');
                     }
                 };
 
-                // Wait for all elements to be ready, then hide loading
-                let readyCount = 0;
+                // Check if elements are ready
                 const checkReady = () => {
                     readyCount++;
-                    if (readyCount >= 3) {
+                    // Only hide when all 3 are ready
+                    if (readyCount >= 3 && !loadingHidden) {
                         // Small delay to ensure elements are fully rendered
-                        setTimeout(hideLoading, 500);
+                        if (hideTimeout) clearTimeout(hideTimeout);
+                        hideTimeout = setTimeout(hideLoading, 600);
                     }
                 };
 
-                // Listen for ready events
-                cardNumberDisplay.on('ready', checkReady);
-                cardExpiryDisplay.on('ready', checkReady);
-                cardCvcDisplay.on('ready', checkReady);
+                // Listen for ready events (only once per element)
+                let numberReady = false;
+                let expiryReady = false;
+                let cvcReady = false;
 
-                // Fallback: Hide loading after a maximum wait time
-                setTimeout(() => {
-                    // Check if elements have content
+                cardNumberDisplay.on('ready', () => {
+                    if (!numberReady) {
+                        numberReady = true;
+                        checkReady();
+                    }
+                });
+
+                cardExpiryDisplay.on('ready', () => {
+                    if (!expiryReady) {
+                        expiryReady = true;
+                        checkReady();
+                    }
+                });
+
+                cardCvcDisplay.on('ready', () => {
+                    if (!cvcReady) {
+                        cvcReady = true;
+                        checkReady();
+                    }
+                });
+
+                // Fallback: Hide loading after a maximum wait time or when content is detected
+                const checkContent = () => {
+                    if (loadingHidden) return;
+
                     const cardNumberEl = document.getElementById('card-number');
                     const cardExpiryEl = document.getElementById('card-expiry');
                     const cardCvcEl = document.getElementById('card-cvc');
 
                     if (cardNumberEl && cardExpiryEl && cardCvcEl) {
-                        // Check if elements have rendered content (check for iframes or text)
-                        const hasContent = cardNumberEl.children.length > 0 ||
-                            cardExpiryEl.children.length > 0 ||
-                            cardCvcEl.children.length > 0;
-                        if (hasContent || readyCount >= 3) {
+                        // Check if elements have rendered content (check for iframes or any children)
+                        const hasNumber = cardNumberEl.children.length > 0 || cardNumberEl.querySelector('iframe');
+                        const hasExpiry = cardExpiryEl.children.length > 0 || cardExpiryEl.querySelector('iframe');
+                        const hasCvc = cardCvcEl.children.length > 0 || cardCvcEl.querySelector('iframe');
+
+                        if ((hasNumber && hasExpiry && hasCvc) || readyCount >= 3) {
                             hideLoading();
+                            return;
                         }
                     }
-                }, 2000);
+
+                    // Continue checking if not all loaded
+                    if (!loadingHidden) {
+                        setTimeout(checkContent, 200);
+                    }
+                };
+
+                // Start checking after a short delay
+                setTimeout(checkContent, 800);
+
+                // Maximum timeout fallback
+                setTimeout(() => {
+                    if (!loadingHidden) {
+                        hideLoading();
+                    }
+                }, 3000);
 
             } catch (error) {
                 // Hide loading on error
@@ -573,5 +624,7 @@
         })();
     </script>
 </body>
+
+</html>
 
 </html>
