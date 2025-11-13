@@ -10,7 +10,7 @@
     </style>
   </head>
   <body>
-    <h2 style="text-align:center;">Secure Card Details 45</h2>
+    <h2 style="text-align:center;">Secure Card Details 46</h2>
     <div class="card-info">
       <div id="card-number" class="stripe-element"></div>
       <div id="card-expiry" class="stripe-element"></div>
@@ -19,7 +19,6 @@
 
     <script>
       (async () => {
-        // Extract query params for cardId and accountId
         const urlParams = new URLSearchParams(window.location.search);
         const cardId = urlParams.get("cardId");
         const accountId = urlParams.get("accountId");
@@ -31,48 +30,53 @@
 
         console.log("cardId:", cardId, "accountId:", accountId);
 
-        // Initialize Stripe with publishable key and connected account
         const stripe = Stripe(
           "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV",
-          { stripeAccount: accountId, apiVersion: "2023-10-16" }
+          { stripeAccount: accountId }
         );
 
         try {
-          // Create the ephemeral key nonce tied to the cardId
+          // Create ephemeral key nonce tied to cardId
           const nonceResult = await stripe.createEphemeralKeyNonce({ issuingCard: cardId });
           const nonce = nonceResult.nonce;
-          console.log("nonce:", nonce);
 
-          // Call your backend Cloud Function to create ephemeral key with nonce
+          // Fetch ephemeral key from your Cloud Function
           const res = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cardId, accountId, nonce }),
           });
-          const data = await res.json();
 
+          const data = await res.json();
           if (!data.success) {
             alert("Error: " + data.error);
             return;
           }
-          console.log("Received ephemeralKeySecret");
 
-          // Create Stripe Elements with required parameters
-const elements = stripe.elements({
-  mode: 'issuing',
-  issuingCard: cardId,
-  clientSecret: data.ephemeralKeySecret,
-});
+          const ephemeralKeySecret = data.ephemeralKeySecret;
+          const elements = stripe.elements();
 
-// Create and mount display elements for card number, expiry, and CVC
-const cardNumberDisplay = elements.create("issuingCardNumberDisplay");
-cardNumberDisplay.mount("#card-number");
+          // ✅ Each element must receive issuingCard, nonce, and ephemeralKeySecret
+          const cardNumberDisplay = elements.create("issuingCardNumberDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+          });
+          cardNumberDisplay.mount("#card-number");
 
-const cardExpiryDisplay = elements.create("issuingCardExpiryDisplay");
-cardExpiryDisplay.mount("#card-expiry");
+          const cardExpiryDisplay = elements.create("issuingCardExpiryDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+          });
+          cardExpiryDisplay.mount("#card-expiry");
 
-const cardCvcDisplay = elements.create("issuingCardCvcDisplay");
-cardCvcDisplay.mount("#card-cvc");
+          const cardCvcDisplay = elements.create("issuingCardCvcDisplay", {
+            issuingCard: cardId,
+            nonce,
+            ephemeralKeySecret,
+          });
+          cardCvcDisplay.mount("#card-cvc");
 
         } catch (error) {
           alert("Unexpected error: " + error.message);
