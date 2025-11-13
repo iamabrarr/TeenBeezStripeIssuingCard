@@ -96,6 +96,7 @@
             flex-direction: column;
             gap: 18px;
             z-index: 1;
+            overflow: visible;
         }
 
         .card-number-container {
@@ -112,12 +113,16 @@
 
         .card-right-details {
             display: flex;
-            gap: 25px;
+            gap: 30px;
             align-items: flex-start;
+            width: 100%;
         }
 
         .card-expiry-container {
             text-align: left;
+            min-width: 80px;
+            flex-shrink: 0;
+            overflow: visible;
         }
 
         .card-expiry-label {
@@ -130,6 +135,9 @@
 
         .card-cvc-container {
             text-align: left;
+            min-width: 60px;
+            flex-shrink: 0;
+            overflow: visible;
         }
 
         .card-cvc-label {
@@ -151,6 +159,8 @@
             letter-spacing: 2px !important;
             font-family: 'Courier New', monospace !important;
             min-height: 24px;
+            overflow: visible !important;
+            white-space: nowrap !important;
         }
 
         .stripe-element input,
@@ -163,6 +173,8 @@
             font-weight: 600 !important;
             letter-spacing: 2px !important;
             font-family: 'Courier New', monospace !important;
+            overflow: visible !important;
+            white-space: nowrap !important;
         }
 
         .stripe-element::placeholder {
@@ -172,20 +184,27 @@
         /* Target Stripe iframes */
         .stripe-element iframe {
             background: transparent !important;
+            overflow: visible !important;
         }
 
         #card-number {
             min-height: 24px;
+            width: 100%;
+            overflow: visible !important;
         }
 
         #card-expiry {
             min-height: 24px;
             text-align: left;
+            width: 100%;
+            overflow: visible !important;
         }
 
         #card-cvc {
             min-height: 24px;
             text-align: left;
+            width: 100%;
+            overflow: visible !important;
         }
 
         /* Loading Indicator */
@@ -291,23 +310,29 @@
             .card-right-details {
                 width: 100%;
                 justify-content: flex-start;
-                gap: 25px;
+                gap: 30px;
             }
 
             .card-expiry-container {
                 text-align: left;
+                min-width: 80px;
             }
 
             .card-cvc-container {
                 text-align: left;
+                min-width: 60px;
             }
 
             #card-expiry {
                 text-align: left;
+                width: 100%;
+                overflow: visible !important;
             }
 
             #card-cvc {
                 text-align: left;
+                width: 100%;
+                overflow: visible !important;
             }
 
             .stripe-element {
@@ -347,7 +372,15 @@
             }
 
             .card-right-details {
-                gap: 20px;
+                gap: 25px;
+            }
+
+            .card-expiry-container {
+                min-width: 70px;
+            }
+
+            .card-cvc-container {
+                min-width: 50px;
             }
 
             .stripe-element {
