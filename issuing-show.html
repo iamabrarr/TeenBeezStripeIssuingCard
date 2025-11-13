@@ -58,21 +58,21 @@
           console.log("Received ephemeralKeySecret");
 
           // Create Stripe Elements with required parameters
-          const elements = stripe.elements({
-            issuingCard: cardId,
-            nonce: nonce,
-            ephemeralKeySecret: data.ephemeralKeySecret,
-          });
+const elements = stripe.elements({
+  mode: 'issuing',
+  issuingCard: cardId,
+  clientSecret: data.ephemeralKeySecret,
+});
 
-          // Create and mount display elements for card number, expiry, and CVC
-          const cardNumberDisplay = elements.create("issuingCardNumberDisplay");
-          cardNumberDisplay.mount("#card-number");
+// Create and mount display elements for card number, expiry, and CVC
+const cardNumberDisplay = elements.create("issuingCardNumberDisplay");
+cardNumberDisplay.mount("#card-number");
 
-          const cardExpiryDisplay = elements.create("issuingCardExpiryDisplay");
-          cardExpiryDisplay.mount("#card-expiry");
+const cardExpiryDisplay = elements.create("issuingCardExpiryDisplay");
+cardExpiryDisplay.mount("#card-expiry");
 
-          const cardCvcDisplay = elements.create("issuingCardCvcDisplay");
-          cardCvcDisplay.mount("#card-cvc");
+const cardCvcDisplay = elements.create("issuingCardCvcDisplay");
+cardCvcDisplay.mount("#card-cvc");
 
         } catch (error) {
           alert("Unexpected error: " + error.message);
