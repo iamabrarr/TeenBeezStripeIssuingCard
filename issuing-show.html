@@ -93,13 +93,13 @@
             left: 24px;
             right: 24px;
             display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
+            flex-direction: column;
+            gap: 18px;
             z-index: 1;
         }
 
         .card-number-container {
-            flex: 1;
+            width: 100%;
         }
 
         .card-number-label {
@@ -112,12 +112,12 @@
 
         .card-right-details {
             display: flex;
-            gap: 20px;
-            align-items: flex-end;
+            gap: 25px;
+            align-items: flex-start;
         }
 
         .card-expiry-container {
-            text-align: right;
+            text-align: left;
         }
 
         .card-expiry-label {
@@ -129,7 +129,7 @@
         }
 
         .card-cvc-container {
-            text-align: right;
+            text-align: left;
         }
 
         .card-cvc-label {
@@ -180,12 +180,12 @@
 
         #card-expiry {
             min-height: 24px;
-            text-align: right;
+            text-align: left;
         }
 
         #card-cvc {
             min-height: 24px;
-            text-align: right;
+            text-align: left;
         }
 
         /* Loading Indicator */
@@ -405,6 +405,10 @@
             const accountId = urlParams.get("accountId");
 
             if (!cardId || !accountId) {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('hidden');
+                }
                 alert("Missing cardId or accountId in URL");
                 return;
             }
@@ -430,6 +434,10 @@
 
                 const data = await res.json();
                 if (!data.success) {
+                    const loadingOverlay = document.getElementById('loading-overlay');
+                    if (loadingOverlay) {
+                        loadingOverlay.classList.add('hidden');
+                    }
                     alert("Error: " + data.error);
                     return;
                 }
@@ -476,35 +484,54 @@
                 });
                 cardCvcDisplay.mount("#card-cvc");
 
+                // Flag to ensure loading is only hidden once
+                let loadingHidden = false;
+                const hideLoading = () => {
+                    if (loadingHidden) return;
+                    loadingHidden = true;
+                    const loadingOverlay = document.getElementById('loading-overlay');
+                    if (loadingOverlay) {
+                        loadingOverlay.classList.add('hidden');
+                    }
+                };
+
                 // Wait for all elements to be ready, then hide loading
-                Promise.all([
-                    new Promise(resolve => {
-                        cardNumberDisplay.on('ready', resolve);
-                        // Fallback timeout
-                        setTimeout(resolve, 1000);
-                    }),
-                    new Promise(resolve => {
-                        cardExpiryDisplay.on('ready', resolve);
-                        setTimeout(resolve, 1000);
-                    }),
-                    new Promise(resolve => {
-                        cardCvcDisplay.on('ready', resolve);
-                        setTimeout(resolve, 1000);
-                    })
-                ]).then(() => {
-                    // Small delay to ensure elements are fully rendered
-                    setTimeout(() => {
-                        const loadingOverlay = document.getElementById('loading-overlay');
-                        if (loadingOverlay) {
-                            loadingOverlay.classList.add('hidden');
+                let readyCount = 0;
+                const checkReady = () => {
+                    readyCount++;
+                    if (readyCount >= 3) {
+                        // Small delay to ensure elements are fully rendered
+                        setTimeout(hideLoading, 500);
+                    }
+                };
+
+                // Listen for ready events
+                cardNumberDisplay.on('ready', checkReady);
+                cardExpiryDisplay.on('ready', checkReady);
+                cardCvcDisplay.on('ready', checkReady);
+
+                // Fallback: Hide loading after a maximum wait time
+                setTimeout(() => {
+                    // Check if elements have content
+                    const cardNumberEl = document.getElementById('card-number');
+                    const cardExpiryEl = document.getElementById('card-expiry');
+                    const cardCvcEl = document.getElementById('card-cvc');
+
+                    if (cardNumberEl && cardExpiryEl && cardCvcEl) {
+                        // Check if elements have rendered content (check for iframes or text)
+                        const hasContent = cardNumberEl.children.length > 0 ||
+                            cardExpiryEl.children.length > 0 ||
+                            cardCvcEl.children.length > 0;
+                        if (hasContent || readyCount >= 3) {
+                            hideLoading();
                         }
-                    }, 300);
-                });
+                    }
+                }, 2000);
 
             } catch (error) {
                 // Hide loading on error
                 const loadingOverlay = document.getElementById('loading-overlay');
-                if (loadingOverlay) {
+                if (loadingOverlay && !loadingOverlay.classList.contains('hidden')) {
                     loadingOverlay.classList.add('hidden');
                 }
                 alert("Unexpected error: " + error.message);
