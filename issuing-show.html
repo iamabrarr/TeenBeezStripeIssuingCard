@@ -4,85 +4,280 @@
     <title>Card Details</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-      body { font-family: Arial, sans-serif; padding: 30px; background: #f9f9f9; }
-      .card-info { display: flex; flex-direction: column; gap: 15px; max-width: 400px; margin: auto; }
-      .stripe-element { padding: 12px; border: 1px solid #ccc; border-radius: 8px; background: white; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      
+      .container {
+        width: 100%;
+        max-width: 450px;
+      }
+      
+      .card {
+        background: linear-gradient(135deg, #00d4ff 0%, #7b2cbf 100%);
+        border-radius: 24px;
+        padding: 40px 30px;
+        color: white;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      
+      .card-content {
+        position: relative;
+        z-index: 1;
+      }
+      
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 50px;
+      }
+      
+      .card-label {
+        font-size: 14px;
+        font-weight: 500;
+        opacity: 0.9;
+        letter-spacing: 1px;
+      }
+      
+      .card-status {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        backdrop-filter: blur(10px);
+      }
+      
+      .card-balance {
+        font-size: 32px;
+        font-weight: 300;
+        margin-bottom: 40px;
+        letter-spacing: 2px;
+      }
+      
+      .card-details {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+      }
+      
+      .detail-field {
+        flex: 1;
+      }
+      
+      .detail-label {
+        font-size: 11px;
+        opacity: 0.75;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 6px;
+        display: block;
+      }
+      
+      .detail-value {
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: 1px;
+        font-family: 'Courier New', monospace;
+        min-height: 28px;
+        display: flex;
+        align-items: center;
+      }
+      
+      .detail-value.loading::after {
+        content: '';
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-left: 8px;
+        background: white;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+      
+      .error-message {
+        background: rgba(255, 100, 100, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 16px;
+        border-radius: 12px;
+        font-size: 14px;
+        margin-top: 20px;
+        text-align: center;
+      }
+      
+      .stripe-element {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <h2 style="text-align:center;">Secure Card Details WORKING PERFECLTY</h2>
-    <div class="card-info">
-      <div id="card-number" class="stripe-element"></div>
-      <div id="card-expiry" class="stripe-element"></div>
-      <div id="card-cvc" class="stripe-element"></div>
+    <div class="container">
+      <div class="card">
+        <div class="card-content">
+          <div class="card-header">
+            <span class="card-label">Virtual Card</span>
+            <span class="card-status">Active</span>
+          </div>
+          
+          <div class="card-balance">€ 0</div>
+          
+          <div class="card-details">
+            <div class="detail-row">
+              <div class="detail-field" style="flex: 1;">
+                <span class="detail-label">Card Number</span>
+                <div id="card-number" class="detail-value loading"></div>
+              </div>
+            </div>
+            
+            <div class="detail-row">
+              <div class="detail-field" style="flex: 1;">
+                <span class="detail-label">Expiry Date</span>
+                <div id="card-expiry" class="detail-value loading"></div>
+              </div>
+              <div class="detail-field" style="flex: 0.4; margin-left: 30px;">
+                <span class="detail-label">CVC</span>
+                <div id="card-cvc" class="detail-value loading"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div id="error-container"></div>
+        </div>
+      </div>
     </div>
+
+    <!-- Hidden Stripe elements for fetching data -->
+    <div id="card-number" class="stripe-element"></div>
+    <div id="card-expiry" class="stripe-element"></div>
+    <div id="card-cvc" class="stripe-element"></div>
 
     <script>
       (async () => {
         const urlParams = new URLSearchParams(window.location.search);
         const cardId = urlParams.get("cardId");
         const accountId = urlParams.get("accountId");
-
+        
         if (!cardId || !accountId) {
-          alert("Missing cardId or accountId in URL");
+          showError("Missing cardId or accountId in URL");
           return;
         }
-
+        
         console.log("cardId:", cardId, "accountId:", accountId);
-
+        
         const stripe = Stripe(
           "pk_test_51RnIO1PnjxZLQWbCzh7H4jjbQC8e6InO0PWjJXMsUYUVBOQUd50KqxrQfhPGEwVSwDoIS5xUBP8JvDGJ1wIr8iGr009Im9BXGV",
           { stripeAccount: accountId }
         );
-
+        
         try {
-          // Create ephemeral key nonce tied to cardId
           const nonceResult = await stripe.createEphemeralKeyNonce({ issuingCard: cardId });
           const nonce = nonceResult.nonce;
-
-          // Fetch ephemeral key from your Cloud Function
+          
           const res = await fetch("https://us-central1-teenbeez.cloudfunctions.net/createIssuingEphemeralKey", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cardId, accountId, nonce }),
           });
-
+          
           const data = await res.json();
           if (!data.success) {
-            alert("Error: " + data.error);
+            showError("Error: " + data.error);
             return;
           }
-
+          
           const ephemeralKeySecret = data.ephemeralKeySecret;
           const elements = stripe.elements();
-
-          // ✅ Each element must receive issuingCard, nonce, and ephemeralKeySecret
+          
+          // Card Number Display
           const cardNumberDisplay = elements.create("issuingCardNumberDisplay", {
             issuingCard: cardId,
             nonce,
             ephemeralKeySecret,
           });
           cardNumberDisplay.mount("#card-number");
-
+          cardNumberDisplay.on("change", (e) => {
+            updateDisplay("card-number", e.value?.cardNumber || "");
+          });
+          
+          // Expiry Display
           const cardExpiryDisplay = elements.create("issuingCardExpiryDisplay", {
             issuingCard: cardId,
             nonce,
             ephemeralKeySecret,
           });
           cardExpiryDisplay.mount("#card-expiry");
-
+          cardExpiryDisplay.on("change", (e) => {
+            updateDisplay("card-expiry", e.value?.expiryMonth && e.value?.expiryYear 
+              ? `${e.value.expiryMonth}/${e.value.expiryYear}` 
+              : "");
+          });
+          
+          // CVC Display
           const cardCvcDisplay = elements.create("issuingCardCvcDisplay", {
             issuingCard: cardId,
             nonce,
             ephemeralKeySecret,
           });
           cardCvcDisplay.mount("#card-cvc");
-
+          cardCvcDisplay.on("change", (e) => {
+            updateDisplay("card-cvc", e.value?.cvc || "");
+          });
+          
         } catch (error) {
-          alert("Unexpected error: " + error.message);
+          showError("Unexpected error: " + error.message);
           console.error(error);
         }
       })();
+      
+      function updateDisplay(elementId, value) {
+        const el = document.getElementById(elementId);
+        if (el) {
+          el.classList.remove("loading");
+          el.textContent = value || "••••";
+        }
+      }
+      
+      function showError(message) {
+        const container = document.getElementById("error-container");
+        container.innerHTML = `<div class="error-message">${message}</div>`;
+      }
     </script>
   </body>
 </html>
