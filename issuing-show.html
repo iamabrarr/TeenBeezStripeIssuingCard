@@ -56,7 +56,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 30px;
             position: relative;
             z-index: 1;
         }
@@ -421,10 +421,10 @@
                 </div>
             </div>
             <div class="card-header">
-                <div class="card-title">Virtual Card</div>
+                <div class="card-title">Virtual Card2</div>
                 <div class="active-badge">Active</div>
             </div>
-            <div class="card-balance">€ 0</div>
+            <div class="card-balance">€ <span id="card-balance">0</span></div>
             <div class="card-details">
                 <div class="card-number-container">
                     <div class="card-number-label">Card Number</div>
@@ -449,6 +449,17 @@
             const urlParams = new URLSearchParams(window.location.search);
             const cardId = urlParams.get("cardId");
             const accountId = urlParams.get("accountId");
+            const balance = urlParams.get("balance");
+
+            // Update balance display if provided
+            if (balance !== null) {
+                const balanceElement = document.getElementById('card-balance');
+                if (balanceElement) {
+                    // Format balance: remove decimals if it's a whole number, otherwise show 2 decimals
+                    const balanceNum = parseFloat(balance);
+                    balanceElement.textContent = balanceNum % 1 === 0 ? balanceNum.toString() : balanceNum.toFixed(2);
+                }
+            }
 
             if (!cardId || !accountId) {
                 const loadingOverlay = document.getElementById('loading-overlay');
